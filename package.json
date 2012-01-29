@@ -1,0 +1,15 @@
+{
+  "author": "Chris Amico <chris@homicidewatch.org> (http://homicidewatch.org)",
+  "name": "hw",
+  "description": "Maps and data interface for Homicide Watch",
+  "version": "0.0.0",
+  "homepage": "http://homicidewatch.org",
+  "repository": {
+    "url": ""
+  },
+  "engines": {
+    "node": "~0.6.8"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

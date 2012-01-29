@@ -1,0 +1,6 @@
+package_assets: off
+template_function: _.template
+gzip_assets: off
+compress_assets: off
+embed_assets: off
+
