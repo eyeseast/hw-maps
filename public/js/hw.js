@@ -1,17 +1,7 @@
 (function() {
-  var Homicide,
-    __hasProp = Object.prototype.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
 
-  Homicide = (function(_super) {
-
-    __extends(Homicide, _super);
-
-    function Homicide() {
-      Homicide.__super__.constructor.apply(this, arguments);
-    }
-
-    Homicide.prototype.initialize = function(attrs) {
+  this.Homicide = Backbone.Model.extend({
+    initialize: function(attrs) {
       this.victims = new VictimList(this.get('victims'));
       this.setTimes();
       this.bind('change', this.setTimes);
@@ -19,9 +9,8 @@
         return this.victims = new VictimList(this.get('victims'));
       });
       return this;
-    };
-
-    Homicide.prototype.setTimes = function() {
+    },
+    setTimes: function() {
       var attr, _i, _len, _ref, _results;
       _ref = ['datetime', 'created', 'modified'];
       _results = [];
@@ -34,9 +23,8 @@
         }
       }
       return _results;
-    };
-
-    Homicide.prototype.toString = function() {
+    },
+    toString: function() {
       var names;
       if (this.victims) {
         names = this.victims.map(function(v) {
@@ -46,14 +34,10 @@
       } else {
         return "Homicide " + this.id;
       }
-    };
-
-    Homicide.prototype.url = function() {
+    },
+    url: function() {
       return this.get('resource_uri') || ("/api/v1/homicides/" + this.id + "/");
-    };
-
-    return Homicide;
-
-  })(Backbone.Model);
+    }
+  });
 
 }).call(this);

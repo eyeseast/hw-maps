@@ -10,7 +10,6 @@ config =
     coffee: ['models', 'collections', 'routers', 'initialize']
     less: []
 
-
 task 'build', 'Build javascript and css files from src/ into public/', (options)->
     start = new Date()
     console.log 'Building...'
@@ -44,6 +43,8 @@ task 'build:scripts', 'Compile CoffeeScript files into public/js', (options)->
                     throw err if err
                     console.error stderr
                     console.log stdout
+                    invoke 'compress'
+                    
 
 task 'compress', 'Run jammit on built javascript, css and image files', (options)->
     console.log 'Compressing files...'

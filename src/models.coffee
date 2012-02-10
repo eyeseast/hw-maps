@@ -1,6 +1,6 @@
 # models
 
-class Homicide extends Backbone.Model
+@Homicide = Backbone.Model.extend
     
     initialize: (attrs) ->
         @victims = new VictimList @get('victims')

@@ -4,3 +4,19 @@ gzip_assets: off
 compress_assets: off
 embed_assets: off
 
+javascripts:
+    hw:
+        - public/js/lib/date.js
+        - public/js/lib/underscore.js
+        - public/js/lib/backbone.js
+        - public/js/hw.js
+        - src/templates/*.jst
+    
+stylesheets:
+    hw:
+        - public/css/*.css
+
+coffee:
+    - src/models.coffee
+    - src/collections.coffee
+    - src/views/*.coffee
