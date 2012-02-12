@@ -1,14 +1,14 @@
 async  = require 'async'
 fs     = require 'fs'
 {exec} = require 'child_process'
-stitch = require 'stitch'
 util   = require 'util'
 yaml   = require 'yaml'
 
 CWD = process.cwd()
-config =
-    coffee: ['models', 'collections', 'routers', 'initialize']
-    less: []
+#config =
+#    coffee: ['models', 'collections', 'routers', 'initialize']
+#    less: []
+config = yaml.eval fs.readFileSync('config/assets.yml', 'utf8')
 
 task 'build', 'Build javascript and css files from src/ into public/', (options)->
     start = new Date()

@@ -1,15 +1,21 @@
 {
   "author": "Chris Amico <chris@homicidewatch.org> (http://homicidewatch.org)",
-  "name": "hw",
+  "name": "hw-maps",
   "description": "Maps and data interface for Homicide Watch",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "homepage": "http://homicidewatch.org",
   "repository": {
-    "url": ""
+    "type": "git",
+    "url": "git@github.com:eyeseast/hw-maps.git"
   },
   "engines": {
     "node": "~0.6.8"
   },
-  "dependencies": {},
+  "dependencies": {
+    "async": "~0.1.15",
+    "coffee-script": "~1.2.0",
+    "hogan.js": "~1.0.5",
+    "yaml": "~0.2.3"
+  },
   "devDependencies": {}
 }
