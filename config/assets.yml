@@ -1,5 +1,5 @@
-package_assets: off
-template_function: _.template
+package_assets: on
+template_function: Hogan.compile
 gzip_assets: off
 compress_assets: off
 embed_assets: off
@@ -9,6 +9,7 @@ javascripts:
         - public/js/lib/date.js
         - public/js/lib/underscore.js
         - public/js/lib/backbone.js
+        - public/js/lib/hogan-1.0.5.js
         - public/js/hw.js
         - src/templates/*.jst
     

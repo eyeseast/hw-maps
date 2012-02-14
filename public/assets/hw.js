@@ -1144,7 +1144,8 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
 
 }).call(this);
 
-//     Backbone.js 0.9.0
+//     Backbone.js 0.9.1
+
 //     (c) 2010-2012 Jeremy Ashkenas, DocumentCloud Inc.
 //     Backbone may be freely distributed under the MIT license.
 //     For all details and documentation:
@@ -1177,7 +1178,7 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
   }
 
   // Current version of the library. Keep in sync with `package.json`.
-  Backbone.VERSION = '0.9.0';
+  Backbone.VERSION = '0.9.1';
 
   // Require Underscore, if we're on the server, and it's not already present.
   var _ = root._;
@@ -1185,6 +1186,15 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
 
   // For Backbone's purposes, jQuery, Zepto, or Ender owns the `$` variable.
   var $ = root.jQuery || root.Zepto || root.ender;
+
+  // Set the JavaScript library that will be used for DOM manipulation and
+  // Ajax calls (a.k.a. the `$` variable). By default Backbone will use: jQuery,
+  // Zepto, or Ender; but the `setDomLibrary()` method lets you inject an
+  // alternate JavaScript library (or a mock library for testing your views
+  // outside of a browser).
+  Backbone.setDomLibrary = function(lib) {
+    $ = lib;
+  };
 
   // Runs Backbone.js in *noConflict* mode, returning the `Backbone` variable
   // to its previous owner. Returns a reference to this Backbone object.
@@ -1309,11 +1319,10 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
     this.attributes = {};
     this._escapedAttributes = {};
     this.cid = _.uniqueId('c');
-    this._changed = {};
     if (!this.set(attributes, {silent: true})) {
       throw new Error("Can't create an invalid model");
     }
-    this._changed = {};
+    delete this._changed;
     this._previousAttributes = _.clone(this.attributes);
     this.initialize.apply(this, arguments);
   };
@@ -1369,10 +1378,10 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
       options || (options = {});
       if (!attrs) return this;
       if (attrs instanceof Backbone.Model) attrs = attrs.attributes;
-      if (options.unset) for (var attr in attrs) attrs[attr] = void 0;
+      if (options.unset) for (attr in attrs) attrs[attr] = void 0;
 
       // Run validation.
-      if (this.validate && !this._performValidation(attrs, options)) return false;
+      if (!this._validate(attrs, options)) return false;
 
       // Check for changes of `id`.
       if (this.idAttribute in attrs) this.id = attrs[this.idAttribute];
@@ -1380,14 +1389,19 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
       var now = this.attributes;
       var escaped = this._escapedAttributes;
       var prev = this._previousAttributes || {};
-      var alreadyChanging = this._changing;
-      this._changing = true;
+      var alreadySetting = this._setting;
+      this._changed || (this._changed = {});
+      this._setting = true;
 
       // Update attributes.
       for (attr in attrs) {
         val = attrs[attr];
         if (!_.isEqual(now[attr], val)) delete escaped[attr];
         options.unset ? delete now[attr] : now[attr] = val;
+        if (this._changing && !_.isEqual(this._changed[attr], val)) {
+          this.trigger('change:' + attr, this, val, options);
+          this._moreChanges = true;
+        }
         delete this._changed[attr];
         if (!_.isEqual(prev[attr], val) || (_.has(now, attr) != _.has(prev, attr))) {
           this._changed[attr] = val;
@@ -1395,9 +1409,9 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
       }
 
       // Fire the `"change"` events, if the model has been changed.
-      if (!alreadyChanging) {
+      if (!alreadySetting) {
         if (!options.silent && this.hasChanged()) this.change(options);
-        this._changing = false;
+        this._setting = false;
       }
       return this;
     },
@@ -1435,7 +1449,7 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
     // If the server returns an attributes hash that differs, the model's
     // state will be `set` again.
     save: function(key, value, options) {
-      var attrs;
+      var attrs, current;
       if (_.isObject(key) || key == null) {
         attrs = key;
         options = value;
@@ -1445,7 +1459,11 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
       }
 
       options = options ? _.clone(options) : {};
-      if (attrs && !this[options.wait ? '_performValidation' : 'set'](attrs, options)) return false;
+      if (options.wait) current = _.clone(this.attributes);
+      var silentOptions = _.extend({}, options, {silent: true});
+      if (attrs && !this.set(attrs, options.wait ? silentOptions : options)) {
+        return false;
+      }
       var model = this;
       var success = options.success;
       options.success = function(resp, status, xhr) {
@@ -1460,7 +1478,9 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
       };
       options.error = Backbone.wrapError(options.error, model, options);
       var method = this.isNew() ? 'create' : 'update';
-      return (this.sync || Backbone.sync).call(this, method, this, options);
+      var xhr = (this.sync || Backbone.sync).call(this, method, this, options);
+      if (options.wait) this.set(current, silentOptions);
+      return xhr;
     },
 
     // Destroy this model on the server if it was already persisted.
@@ -1519,19 +1539,27 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
     // a `"change:attribute"` event for each changed attribute.
     // Calling this will cause all objects observing the model to update.
     change: function(options) {
+      if (this._changing || !this.hasChanged()) return this;
+      this._changing = true;
+      this._moreChanges = true;
       for (var attr in this._changed) {
         this.trigger('change:' + attr, this, this._changed[attr], options);
       }
-      this.trigger('change', this, options);
+      while (this._moreChanges) {
+        this._moreChanges = false;
+        this.trigger('change', this, options);
+      }
       this._previousAttributes = _.clone(this.attributes);
-      this._changed = {};
+      delete this._changed;
+      this._changing = false;
+      return this;
     },
 
     // Determine if the model has changed since the last `"change"` event.
     // If you specify an attribute name, determine if that attribute has changed.
     hasChanged: function(attr) {
-      if (attr) return _.has(this._changed, attr);
-      return !_.isEmpty(this._changed);
+      if (!arguments.length) return !_.isEmpty(this._changed);
+      return this._changed && _.has(this._changed, attr);
     },
 
     // Return an object containing all the attributes that have changed, or
@@ -1553,7 +1581,7 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
     // Get the previous value of an attribute, recorded at the time the last
     // `"change"` event was fired.
     previous: function(attr) {
-      if (!attr || !this._previousAttributes) return null;
+      if (!arguments.length || !this._previousAttributes) return null;
       return this._previousAttributes[attr];
     },
 
@@ -1563,21 +1591,26 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
       return _.clone(this._previousAttributes);
     },
 
+    // Check if the model is currently in a valid state. It's only possible to
+    // get into an *invalid* state if you're using silent changes.
+    isValid: function() {
+      return !this.validate(this.attributes);
+    },
+
     // Run validation against a set of incoming attributes, returning `true`
     // if all is well. If a specific `error` callback has been passed,
     // call that instead of firing the general `"error"` event.
-    _performValidation: function(attrs, options) {
-      var newAttrs = _.extend({}, this.attributes, attrs);
-      var error = this.validate(newAttrs, options);
-      if (error) {
-        if (options.error) {
-          options.error(this, error, options);
-        } else {
-          this.trigger('error', this, error, options);
-        }
-        return false;
+    _validate: function(attrs, options) {
+      if (options.silent || !this.validate) return true;
+      attrs = _.extend({}, this.attributes, attrs);
+      var error = this.validate(attrs, options);
+      if (!error) return true;
+      if (options && options.error) {
+        options.error(this, error, options);
+      } else {
+        this.trigger('error', this, error, options);
       }
-      return true;
+      return false;
     }
 
   });
@@ -1796,7 +1829,7 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
         var attrs = model;
         options.collection = this;
         model = new this.model(attrs, options);
-        if (model.validate && !model._performValidation(model.attributes, options)) model = false;
+        if (!model._validate(model.attributes, options)) model = false;
       } else if (!model.collection) {
         model.collection = this;
       }
@@ -1961,9 +1994,9 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
           fragment = window.location.hash;
         }
       }
-      fragment = decodeURIComponent(fragment.replace(routeStripper, ''));
+      fragment = decodeURIComponent(fragment);
       if (!fragment.indexOf(this.options.root)) fragment = fragment.substr(this.options.root.length);
-      return fragment;
+      return fragment.replace(routeStripper, '');
     },
 
     // Start the hash change handling, returning `true` if the current URL matches
@@ -2177,6 +2210,7 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
       this.$el = $(element);
       this.el = this.$el[0];
       if (delegate !== false) this.delegateEvents();
+      return this;
     },
 
     // Set callbacks, where `this.events` is a hash of
@@ -2333,11 +2367,11 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
   // Wrap an optional error callback with a fallback error event.
   Backbone.wrapError = function(onError, originalModel, options) {
     return function(model, resp) {
-      var resp = model === originalModel ? resp : model;
+      resp = model === originalModel ? resp : model;
       if (onError) {
-        onError(model, resp, options);
+        onError(originalModel, resp, options);
       } else {
-        originalModel.trigger('error', model, resp, options);
+        originalModel.trigger('error', originalModel, resp, options);
       }
     };
   };
@@ -2401,46 +2435,735 @@ return((r[1].length===0)?r[0]:null);};};$D.parseExact=function(s,fx){return $D.g
 
 }).call(this);
 
-(function() {
+/*
+ *  Copyright 2011 Twitter, Inc.
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 
-  this.Homicide = Backbone.Model.extend({
-    initialize: function(attrs) {
+
+
+var Hogan = {};
+
+(function (Hogan) {
+  Hogan.Template = function constructor(renderFunc, text, compiler) {
+    if (renderFunc) {
+      this.r = renderFunc;
+    }
+    this.c = compiler;
+    this.text = text || '';
+  }
+
+  Hogan.Template.prototype = {
+    // render: replaced by generated code.
+    r: function (context, partials, indent) { return ''; },
+
+    // variable escaping
+    v: hoganEscape,
+
+    render: function render(context, partials, indent) {
+      return this.ri([context], partials || {}, indent);
+    },
+
+    // render internal -- a hook for overrides that catches partials too
+    ri: function (context, partials, indent) {
+      return this.r(context, partials, indent);
+    },
+
+    // tries to find a partial in the curent scope and render it
+    rp: function(name, context, partials, indent) {
+      var partial = partials[name];
+
+      if (!partial) {
+        return '';
+      }
+
+      if (this.c && typeof partial == 'string') {
+        partial = this.c.compile(partial);
+      }
+
+      return partial.ri(context, partials, indent);
+    },
+
+    // render a section
+    rs: function(context, partials, section) {
+      var buf = '',
+          tail = context[context.length - 1];
+
+      if (!isArray(tail)) {
+        return buf = section(context, partials);
+      }
+
+      for (var i = 0; i < tail.length; i++) {
+        context.push(tail[i]);
+        buf += section(context, partials);
+        context.pop();
+      }
+
+      return buf;
+    },
+
+    // maybe start a section
+    s: function(val, ctx, partials, inverted, start, end, tags) {
+      var pass;
+
+      if (isArray(val) && val.length === 0) {
+        return false;
+      }
+
+      if (typeof val == 'function') {
+        val = this.ls(val, ctx, partials, inverted, start, end, tags);
+      }
+
+      pass = (val === '') || !!val;
+
+      if (!inverted && pass && ctx) {
+        ctx.push((typeof val == 'object') ? val : ctx[ctx.length - 1]);
+      }
+
+      return pass;
+    },
+
+    // find values with dotted names
+    d: function(key, ctx, partials, returnFound) {
+      var names = key.split('.'),
+          val = this.f(names[0], ctx, partials, returnFound),
+          cx = null;
+
+      if (key === '.' && isArray(ctx[ctx.length - 2])) {
+        return ctx[ctx.length - 1];
+      }
+
+      for (var i = 1; i < names.length; i++) {
+        if (val && typeof val == 'object' && names[i] in val) {
+          cx = val;
+          val = val[names[i]];
+        } else {
+          val = '';
+        }
+      }
+
+      if (returnFound && !val) {
+        return false;
+      }
+
+      if (!returnFound && typeof val == 'function') {
+        ctx.push(cx);
+        val = this.lv(val, ctx, partials);
+        ctx.pop();
+      }
+
+      return val;
+    },
+
+    // find values with normal names
+    f: function(key, ctx, partials, returnFound) {
+      var val = false,
+          v = null,
+          found = false;
+
+      for (var i = ctx.length - 1; i >= 0; i--) {
+        v = ctx[i];
+        if (v && typeof v == 'object' && key in v) {
+          val = v[key];
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        return (returnFound) ? false : "";
+      }
+
+      if (!returnFound && typeof val == 'function') {
+        val = this.lv(val, ctx, partials);
+      }
+
+      return val;
+    },
+
+    // higher order templates
+    ho: function(val, cx, partials, text, tags) {
+      var compiler = this.c;
+      var t = val.call(cx, text, function(t) {
+        return compiler.compile(t, {delimiters: tags}).render(cx, partials);
+      });
+      var s = compiler.compile(t.toString(), {delimiters: tags}).render(cx, partials);
+      this.b = s;
+      return false;
+    },
+
+    // higher order template result buffer
+    b: '',
+
+    // lambda replace section
+    ls: function(val, ctx, partials, inverted, start, end, tags) {
+      var cx = ctx[ctx.length - 1],
+          t = null;
+
+      if (!inverted && this.c && val.length > 0) {
+        return this.ho(val, cx, partials, this.text.substring(start, end), tags);
+      }
+
+      t = val.call(cx);
+
+      if (typeof t == 'function') {
+        if (inverted) {
+          return true;
+        } else if (this.c) {
+          return this.ho(t, cx, partials, this.text.substring(start, end), tags);
+        }
+      }
+
+      return t;
+    },
+
+    // lambda replace variable
+    lv: function(val, ctx, partials) {
+      var cx = ctx[ctx.length - 1];
+      var result = val.call(cx);
+      if (typeof result == 'function') {
+        result = result.call(cx);
+      }
+      result = result.toString();
+
+      if (this.c && ~result.indexOf("{{")) {
+        return this.c.compile(result).render(cx, partials);
+      }
+
+      return result;
+    }
+
+  };
+
+  var rAmp = /&/g,
+      rLt = /</g,
+      rGt = />/g,
+      rApos =/\'/g,
+      rQuot = /\"/g,
+      hChars =/[&<>\"\']/;
+
+  function hoganEscape(str) {
+    str = String((str === null || str === undefined) ? '' : str);
+    return hChars.test(str) ?
+      str
+        .replace(rAmp,'&amp;')
+        .replace(rLt,'&lt;')
+        .replace(rGt,'&gt;')
+        .replace(rApos,'&#39;')
+        .replace(rQuot, '&quot;') :
+      str;
+  }
+
+  var isArray = Array.isArray || function(a) {
+    return Object.prototype.toString.call(a) === '[object Array]';
+  };
+
+})(typeof exports !== 'undefined' ? exports : Hogan);
+
+
+
+
+(function (Hogan) {
+  // Setup regex  assignments
+  // remove whitespace according to Mustache spec
+  var rIsWhitespace = /\S/,
+      rQuot = /\"/g,
+      rNewline =  /\n/g,
+      rCr = /\r/g,
+      rSlash = /\\/g,
+      tagTypes = {
+        '#': 1, '^': 2, '/': 3,  '!': 4, '>': 5,
+        '<': 6, '=': 7, '_v': 8, '{': 9, '&': 10
+      };
+
+  Hogan.scan = function scan(text, delimiters) {
+    var len = text.length,
+        IN_TEXT = 0,
+        IN_TAG_TYPE = 1,
+        IN_TAG = 2,
+        state = IN_TEXT,
+        tagType = null,
+        tag = null,
+        buf = '',
+        tokens = [],
+        seenTag = false,
+        i = 0,
+        lineStart = 0,
+        otag = '{{',
+        ctag = '}}';
+
+    function addBuf() {
+      if (buf.length > 0) {
+        tokens.push(new String(buf));
+        buf = '';
+      }
+    }
+
+    function lineIsWhitespace() {
+      var isAllWhitespace = true;
+      for (var j = lineStart; j < tokens.length; j++) {
+        isAllWhitespace =
+          (tokens[j].tag && tagTypes[tokens[j].tag] < tagTypes['_v']) ||
+          (!tokens[j].tag && tokens[j].match(rIsWhitespace) === null);
+        if (!isAllWhitespace) {
+          return false;
+        }
+      }
+
+      return isAllWhitespace;
+    }
+
+    function filterLine(haveSeenTag, noNewLine) {
+      addBuf();
+
+      if (haveSeenTag && lineIsWhitespace()) {
+        for (var j = lineStart, next; j < tokens.length; j++) {
+          if (!tokens[j].tag) {
+            if ((next = tokens[j+1]) && next.tag == '>') {
+              // set indent to token value
+              next.indent = tokens[j].toString()
+            }
+            tokens.splice(j, 1);
+          }
+        }
+      } else if (!noNewLine) {
+        tokens.push({tag:'\n'});
+      }
+
+      seenTag = false;
+      lineStart = tokens.length;
+    }
+
+    function changeDelimiters(text, index) {
+      var close = '=' + ctag,
+          closeIndex = text.indexOf(close, index),
+          delimiters = trim(
+            text.substring(text.indexOf('=', index) + 1, closeIndex)
+          ).split(' ');
+
+      otag = delimiters[0];
+      ctag = delimiters[1];
+
+      return closeIndex + close.length - 1;
+    }
+
+    if (delimiters) {
+      delimiters = delimiters.split(' ');
+      otag = delimiters[0];
+      ctag = delimiters[1];
+    }
+
+    for (i = 0; i < len; i++) {
+      if (state == IN_TEXT) {
+        if (tagChange(otag, text, i)) {
+          --i;
+          addBuf();
+          state = IN_TAG_TYPE;
+        } else {
+          if (text.charAt(i) == '\n') {
+            filterLine(seenTag);
+          } else {
+            buf += text.charAt(i);
+          }
+        }
+      } else if (state == IN_TAG_TYPE) {
+        i += otag.length - 1;
+        tag = tagTypes[text.charAt(i + 1)];
+        tagType = tag ? text.charAt(i + 1) : '_v';
+        if (tagType == '=') {
+          i = changeDelimiters(text, i);
+          state = IN_TEXT;
+        } else {
+          if (tag) {
+            i++;
+          }
+          state = IN_TAG;
+        }
+        seenTag = i;
+      } else {
+        if (tagChange(ctag, text, i)) {
+          tokens.push({tag: tagType, n: trim(buf), otag: otag, ctag: ctag,
+                       i: (tagType == '/') ? seenTag - ctag.length : i + otag.length});
+          buf = '';
+          i += ctag.length - 1;
+          state = IN_TEXT;
+          if (tagType == '{') {
+            if (ctag == '}}') {
+              i++;
+            } else {
+              cleanTripleStache(tokens[tokens.length - 1]);
+            }
+          }
+        } else {
+          buf += text.charAt(i);
+        }
+      }
+    }
+
+    filterLine(seenTag, true);
+
+    return tokens;
+  }
+
+  function cleanTripleStache(token) {
+    if (token.n.substr(token.n.length - 1) === '}') {
+      token.n = token.n.substring(0, token.n.length - 1);
+    }
+  }
+
+  function trim(s) {
+    if (s.trim) {
+      return s.trim();
+    }
+
+    return s.replace(/^\s*|\s*$/g, '');
+  }
+
+  function tagChange(tag, text, index) {
+    if (text.charAt(index) != tag.charAt(0)) {
+      return false;
+    }
+
+    for (var i = 1, l = tag.length; i < l; i++) {
+      if (text.charAt(index + i) != tag.charAt(i)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function buildTree(tokens, kind, stack, customTags) {
+    var instructions = [],
+        opener = null,
+        token = null;
+
+    while (tokens.length > 0) {
+      token = tokens.shift();
+      if (token.tag == '#' || token.tag == '^' || isOpener(token, customTags)) {
+        stack.push(token);
+        token.nodes = buildTree(tokens, token.tag, stack, customTags);
+        instructions.push(token);
+      } else if (token.tag == '/') {
+        if (stack.length === 0) {
+          throw new Error('Closing tag without opener: /' + token.n);
+        }
+        opener = stack.pop();
+        if (token.n != opener.n && !isCloser(token.n, opener.n, customTags)) {
+          throw new Error('Nesting error: ' + opener.n + ' vs. ' + token.n);
+        }
+        opener.end = token.i;
+        return instructions;
+      } else {
+        instructions.push(token);
+      }
+    }
+
+    if (stack.length > 0) {
+      throw new Error('missing closing tag: ' + stack.pop().n);
+    }
+
+    return instructions;
+  }
+
+  function isOpener(token, tags) {
+    for (var i = 0, l = tags.length; i < l; i++) {
+      if (tags[i].o == token.n) {
+        token.tag = '#';
+        return true;
+      }
+    }
+  }
+
+  function isCloser(close, open, tags) {
+    for (var i = 0, l = tags.length; i < l; i++) {
+      if (tags[i].c == close && tags[i].o == open) {
+        return true;
+      }
+    }
+  }
+
+  function writeCode(tree) {
+    return 'i = i || "";var b = i + "";var _ = this;' + walk(tree) + 'return b;';
+  }
+
+  Hogan.generate = function (code, text, options) {
+    if (options.asString) {
+      return 'function(c,p,i){' + code + ';}';
+    }
+
+    return new Hogan.Template(new Function('c', 'p', 'i', code), text, Hogan);
+  }
+
+  function esc(s) {
+    return s.replace(rSlash, '\\\\')
+            .replace(rQuot, '\\\"')
+            .replace(rNewline, '\\n')
+            .replace(rCr, '\\r');
+  }
+
+  function chooseMethod(s) {
+    return (~s.indexOf('.')) ? 'd' : 'f';
+  }
+
+  function walk(tree) {
+    var code = '';
+    for (var i = 0, l = tree.length; i < l; i++) {
+      var tag = tree[i].tag;
+      if (tag == '#') {
+        code += section(tree[i].nodes, tree[i].n, chooseMethod(tree[i].n),
+                        tree[i].i, tree[i].end, tree[i].otag + " " + tree[i].ctag);
+      } else if (tag == '^') {
+        code += invertedSection(tree[i].nodes, tree[i].n,
+                                chooseMethod(tree[i].n));
+      } else if (tag == '<' || tag == '>') {
+        code += partial(tree[i]);
+      } else if (tag == '{' || tag == '&') {
+        code += tripleStache(tree[i].n, chooseMethod(tree[i].n));
+      } else if (tag == '\n') {
+        code += text('"\\n"' + (tree.length-1 == i ? '' : ' + i'));
+      } else if (tag == '_v') {
+        code += variable(tree[i].n, chooseMethod(tree[i].n));
+      } else if (tag === undefined) {
+        code += text('"' + esc(tree[i]) + '"');
+      }
+    }
+    return code;
+  }
+
+  function section(nodes, id, method, start, end, tags) {
+    return 'if(_.s(_.' + method + '("' + esc(id) + '",c,p,1),' +
+           'c,p,0,' + start + ',' + end + ', "' + tags + '")){' +
+           'b += _.rs(c,p,' +
+           'function(c,p){ var b = "";' +
+           walk(nodes) +
+           'return b;});c.pop();}' +
+           'else{b += _.b; _.b = ""};';
+  }
+
+  function invertedSection(nodes, id, method) {
+    return 'if (!_.s(_.' + method + '("' + esc(id) + '",c,p,1),c,p,1,0,0,"")){' +
+           walk(nodes) +
+           '};';
+  }
+
+  function partial(tok) {
+    return 'b += _.rp("' +  esc(tok.n) + '",c,p,"' + (tok.indent || '') + '");';
+  }
+
+  function tripleStache(id, method) {
+    return 'b += (_.' + method + '("' + esc(id) + '",c,p,0));';
+  }
+
+  function variable(id, method) {
+    return 'b += (_.v(_.' + method + '("' + esc(id) + '",c,p,0)));';
+  }
+
+  function text(id) {
+    return 'b += ' + id + ';';
+  }
+
+  Hogan.parse = function(tokens, options) {
+    options = options || {};
+    return buildTree(tokens, '', [], options.sectionTags || []);
+  },
+
+  Hogan.cache = {};
+
+  Hogan.compile = function(text, options) {
+    // options
+    //
+    // asString: false (default)
+    //
+    // sectionTags: [{o: '_foo', c: 'foo'}]
+    // An array of object with o and c fields that indicate names for custom
+    // section tags. The example above allows parsing of {{_foo}}{{/foo}}.
+    //
+    // delimiters: A string that overrides the default delimiters.
+    // Example: "<% %>"
+    //
+    options = options || {};
+
+    var key = text + '||' + !!options.asString;
+
+    var t = this.cache[key];
+
+    if (t) {
+      return t;
+    }
+
+    t = this.generate(writeCode(this.parse(this.scan(text, options.delimiters), options)), text, options);
+    return this.cache[key] = t;
+  };
+})(typeof exports !== 'undefined' ? exports : Hogan);
+
+
+(function() {
+  var HomicideList, Victim, VictimList, templates;
+  var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; }, __hasProp = Object.prototype.hasOwnProperty, __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
+
+  templates = {};
+
+  templates.popup = Hogan.compile('<div class="datetime">\n<time datetime="{{ datetime }}">\n    {{ #datetime }}{{ #toString }}MMM. d yyyy, h:mm tt{{ /toString }}{{ /datetime }}\n</time>\n</div>\n<div class="victims">\n{{#victims}}\n    {{> victim }}\n{{/victims}}\n</victims>\n<div class="location">\n{{ address }}\n</div>');
+
+  templates.victim = Hogan.compile('<div class="victim" id="v{{id}}">\n{{#profile_photo}}\n<img src="{{thumbnail}}" style="float:left; margin: 0 .5em .5em 0;"\nheight="75" width="75" class="profile_photo">\n{{/profile_photo}}\n<p><strong><a href="{{absolute_url}}">{{full_name}}</a></strong></p>\n</div>');
+
+  this.Homicide = (function() {
+
+    __extends(Homicide, Backbone.Model);
+
+    function Homicide() {
+      this.toString = __bind(this.toString, this);
+      this.normalize = __bind(this.normalize, this);
+      Homicide.__super__.constructor.apply(this, arguments);
+    }
+
+    Homicide.prototype.initialize = function(attributes, options) {
       this.victims = new VictimList(this.get('victims'));
-      this.setTimes();
-      this.bind('change', this.setTimes);
-      this.bind('change:victims', function() {
+      this.normalize();
+      this.on('change', this.normalize);
+      this.on('change:victims', function() {
         return this.victims = new VictimList(this.get('victims'));
       });
       return this;
-    },
-    setTimes: function() {
-      var attr, _i, _len, _ref, _results;
+    };
+
+    Homicide.prototype.normalize = function() {
+      var attr, changes, point, _i, _len, _ref;
+      changes = {};
       _ref = ['datetime', 'created', 'modified'];
-      _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         attr = _ref[_i];
-        if (this.get(attr)) {
-          _results.push(this.attributes[attr] = Date.parse(this.get(attr)));
-        } else {
-          _results.push(void 0);
-        }
+        if (this.get(attr)) changes[attr] = Date.parse(this.get(attr));
       }
-      return _results;
-    },
-    toString: function() {
+      point = this.get('point');
+      if (point.coordinates) {
+        changes.point = new L.LatLng(point.coordinates[1], point.coordinates[0]);
+      }
+      return this.set(changes);
+    };
+
+    Homicide.prototype.toString = function() {
       var names;
       if (this.victims) {
-        names = this.victims.map(function(v) {
-          return v.get('full_name');
-        });
+        names = this.victims.pluck('full_name');
         return _.compact(names).join(', ');
       } else {
         return "Homicide " + this.id;
       }
-    },
-    url: function() {
+    };
+
+    Homicide.prototype.url = function() {
       return this.get('resource_uri') || ("/api/v1/homicides/" + this.id + "/");
+    };
+
+    return Homicide;
+
+  })();
+
+  Victim = (function() {
+
+    __extends(Victim, Backbone.Model);
+
+    function Victim() {
+      this.normalize = __bind(this.normalize, this);
+      Victim.__super__.constructor.apply(this, arguments);
     }
-  });
+
+    Victim.prototype.initialize = function(attributes) {
+      this.on('change', this.normalize);
+      this.view = new VictimInfoWindowView({
+        model: this
+      });
+      return this;
+    };
+
+    Victim.prototype.normalize = function() {
+      var attr, changes, _i, _len, _ref;
+      changes = {};
+      _ref = ['created', 'modified', 'dod', 'dob', 'incident_date'];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        attr = _ref[_i];
+        if (this.get(attr)) changes[attr] = Date.parse(this.get(attr));
+      }
+      return this.set(changes);
+    };
+
+    Victim.prototype.toString = function() {
+      return this.get('full_name');
+    };
+
+    Victim.prototype.url = function() {
+      return this.get('resource_uri' || ("/api/v1/victims/" + this.id));
+    };
+
+    return Victim;
+
+  })();
+
+  /*
+  HomicideList handles all filtering methods related
+  to homicide incidents.
+  */
+
+  HomicideList = (function() {
+
+    __extends(HomicideList, Backbone.Collection);
+
+    function HomicideList() {
+      HomicideList.__super__.constructor.apply(this, arguments);
+    }
+
+    HomicideList.prototype.model = Homicide;
+
+    HomicideList.prototype.parse = function(response) {
+      return response.objects;
+    };
+
+    HomicideList.prototype.getVictims = function() {
+      var victims;
+      victims = this.map(function(homicide) {
+        return homicide.victims;
+      });
+      return new VictimList(_.flatten(victims));
+    };
+
+    return HomicideList;
+
+  })();
+
+  VictimList = (function() {
+
+    __extends(VictimList, Backbone.Collection);
+
+    function VictimList() {
+      VictimList.__super__.constructor.apply(this, arguments);
+    }
+
+    VictimList.prototype.model = Victim;
+
+    VictimList.prototype.parse = function(response) {
+      return response.objects;
+    };
+
+    return VictimList;
+
+  })();
 
 }).call(this);
+(function(){
+window.JST = window.JST || {};
+
+window.JST['popup'] = Hogan.compile('<div class="datetime">\n    <time datetime="{{ datetime }}">\n        {{ #datetime }}{{ #toString }}MMM. d yyyy, h:mm tt{{ /toString }}{{ /datetime }}\n    </time>\n</div>\n<div class="victims">\n    {{#victims}}\n        {{> victim }}\n    {{/victims}}\n</victims>\n<div class="location">\n    {{ address }}\n</div>');
+window.JST['victim'] = Hogan.compile('<div class="victim" id="v{{id}}">\n    {{#profile_photo}}\n    <img src="{{thumbnail}}" class="profile_photo">\n    {{/profile_photo}}\n    <p><strong><a href="{{absolute_url}}">{{full_name}}</a></strong></p>\n</div>');
+})();
