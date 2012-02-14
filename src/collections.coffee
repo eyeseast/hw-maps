@@ -8,6 +8,9 @@ class HomicideList extends Backbone.Collection
     
     model: Homicide
     
+    initialize: (models, options) ->
+        this
+    
     parse: (response) ->
         response.objects
     

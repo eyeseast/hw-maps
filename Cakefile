@@ -10,7 +10,8 @@ yaml   = require 'yaml'
 CWD = process.cwd()
 # at some point, move this to an external file
 config =
-    coffee: ['templates', 'models', 'collections', 'routers', 'initialize']
+    coffee: ['templates', 'models', 'collections', 
+            'views/maps', 'views/windows', 'routers', 'initialize']
     less: "src/styles/bootstrap/bootstrap.less"
     templates: "src/templates/*.jst"
 #config = yaml.eval fs.readFileSync('config/assets.yml', 'utf8')
@@ -25,7 +26,8 @@ task 'build', 'Build javascript and css files from src/ into public/', (options)
     invoke 'build:images'
     invoke 'build:styles'
     invoke 'build:scripts'
-    invoke 'package'
+    invoke 'build:templates'
+    # invoke 'package'
 
 task 'build:images', 'Copy images into public/img/', (options)->
     console.log 'Copying images...'
@@ -55,6 +57,7 @@ task 'build:templates', 'Precompile templates into one CoffeeScript file', (opti
     templates = {}
     {{#templates}}templates.{{name}} = Hogan.compile '''{{{string}}}'''
     {{/templates}}
+    @templates = templates
     """
     glob config.templates, (err, files) ->
         templates = files.map (file) ->

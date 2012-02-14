@@ -1,12 +1,12 @@
 (function() {
-  var HomicideList, Victim, VictimList, templates;
+  var HomicideList, Map, Victim, VictimList;
   var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; }, __hasProp = Object.prototype.hasOwnProperty, __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
 
-  templates = {};
+  window.templates = {};
 
-  templates.popup = Hogan.compile('<div class="datetime">\n<time datetime="{{ datetime }}">\n    {{ #datetime }}{{ #toString }}MMM. d yyyy, h:mm tt{{ /toString }}{{ /datetime }}\n</time>\n</div>\n<div class="victims">\n{{#victims}}\n    {{> victim }}\n{{/victims}}\n</victims>\n<div class="location">\n{{ address }}\n</div>');
+  templates.popup = Hogan.compile('<div class="datetime">\n<time datetime="{{datetime}}">\n    {{#datetime}}{{#toString}}MMM. d yyyy, h:mm tt{{/toString}}{{/datetime}}\n</time>\n</div>\n<div class="victims">\n{{#victims}}\n    {{> victim}}\n{{/victims}}\n</victims>\n<div class="location">\n{{address}}\n</div>');
 
-  templates.victim = Hogan.compile('<div class="victim" id="v{{id}}">\n{{#profile_photo}}\n<img src="{{thumbnail}}" style="float:left; margin: 0 .5em .5em 0;"\nheight="75" width="75" class="profile_photo">\n{{/profile_photo}}\n<p><strong><a href="{{absolute_url}}">{{full_name}}</a></strong></p>\n</div>');
+  templates.victim = Hogan.compile('<div class="victim" id="v{{id}}">\n{{#profile_photo}}\n<img src="{{thumbnail}}" class="profile_photo">\n{{/profile_photo}}\n<p><strong><a href="{{absolute_url}}">{{full_name}}</a></strong></p>\n</div>');
 
   this.Homicide = (function() {
 
@@ -55,6 +55,14 @@
 
     Homicide.prototype.url = function() {
       return this.get('resource_uri') || ("/api/v1/homicides/" + this.id + "/");
+    };
+
+    Homicide.prototype.next = function() {
+      var ids, index;
+      if (!this.collection) return;
+      ids = this.collection.pluck('id');
+      index = _.indexOf(ids, this.get('id', true));
+      return this.collection.at(index - 1);
     };
 
     return Homicide;
@@ -116,6 +124,10 @@
 
     HomicideList.prototype.model = Homicide;
 
+    HomicideList.prototype.initialize = function(models, options) {
+      return this;
+    };
+
     HomicideList.prototype.parse = function(response) {
       return response.objects;
     };
@@ -147,6 +159,18 @@
     };
 
     return VictimList;
+
+  })();
+
+  Map = (function() {
+
+    __extends(Map, Backbone.View);
+
+    function Map() {
+      Map.__super__.constructor.apply(this, arguments);
+    }
+
+    return Map;
 
   })();
 

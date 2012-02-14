@@ -36,6 +36,14 @@ class @Homicide extends Backbone.Model
 
     url: ->
         @get('resource_uri') or "/api/v1/homicides/#{@id}/"
+    
+    next: ->
+        # return the next chronological homicide
+        # collections are sorted in reverse chron
+        return unless @collection
+        ids = @collection.pluck 'id'
+        index = _.indexOf ids, @get 'id', true
+        @collection.at index - 1
 
 
 class Victim extends Backbone.Model

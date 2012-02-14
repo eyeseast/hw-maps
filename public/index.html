@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="utf-8">
+    <title>Homicide Watch Maps</title>
+    <link rel="stylesheet" href="assets/hw.css" type="text/css" media="screen" title="no title" charset="utf-8">
+</head>
+<body>
+    <div class="container">
+        <h1>Let's make some maps</h1>
+        <div id="homicides"></div>
+    </div>
+    <script src="assets/hw.js"></script>
+    <script>
+        $.ajax({
+            dataType: 'jsonp',
+            url: 'http://localhost:8000/api/v1/victims/',
+            success: function(data) {
+                var root = $('#homicides');
+                _.each(data.objects, function(victim) {
+                    root.append(templates.victim.render(victim))
+                });
+            }
+        })
+    </script>
+</body>

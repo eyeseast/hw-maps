@@ -7,6 +7,7 @@ embed_assets: off
 javascripts:
     hw:
         - public/js/lib/date.js
+        - public/js/lib/jquery-1.7.1.min.js
         - public/js/lib/underscore.js
         - public/js/lib/backbone.js
         - public/js/lib/hogan-1.0.5.js
