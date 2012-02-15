@@ -14,6 +14,7 @@ class @Homicide extends Backbone.Model
     
     normalize: =>
         changes = {}
+        changes.id = Number @id
         
         # parse datetimes into Date objects
         for attr in ['datetime', 'created', 'modified']
@@ -24,8 +25,13 @@ class @Homicide extends Backbone.Model
         point = @get 'point'
         if point.coordinates
             changes.point = new L.LatLng point.coordinates[1], point.coordinates[0]
-        
+                
         @set changes
+    
+    toJSON: ->
+        data = super
+        if @victims? then data.victims = @victims.toJSON()
+        data
 
     toString: =>
         if @victims
@@ -41,16 +47,25 @@ class @Homicide extends Backbone.Model
         # return the next chronological homicide
         # collections are sorted in reverse chron
         return unless @collection
+        
         ids = @collection.pluck 'id'
-        index = _.indexOf ids, @get 'id', true
-        @collection.at index - 1
+        index = _.indexOf ids, @id, true
+        @collection.at(index - 1)
+    
+    previous: ->
+        # return the previous chronological homicide
+        return unless @collection
+        
+        ids = @collection.pluck 'id'
+        index = _.indexOf ids, @id, true
+        @collection.at(index + 1)
 
 
-class Victim extends Backbone.Model
+class @Victim extends Backbone.Model
     
     initialize: (attributes) ->
         @on 'change', @normalize
-        @view = new VictimInfoWindowView model: this
+        # @view = new VictimInfoWindowView model: this
         return this
         
     normalize: =>

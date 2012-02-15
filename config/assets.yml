@@ -11,12 +11,18 @@ javascripts:
         - public/js/lib/underscore.js
         - public/js/lib/backbone.js
         - public/js/lib/hogan-1.0.5.js
+        - public/js/lib/leaflet.js
         - public/js/hw.js
         - src/templates/*.jst
     
 stylesheets:
     hw:
-        - public/css/*.css
+        - public/css/bootstrap.css
+        - public/css/leaflet.css
+        - public/css/style.css
+    
+    hw.ie:
+        - public/css/leaflet.ie.css
 
 coffee:
     - src/models.coffee

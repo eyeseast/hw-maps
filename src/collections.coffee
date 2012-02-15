@@ -4,7 +4,7 @@
 HomicideList handles all filtering methods related
 to homicide incidents.
 ###
-class HomicideList extends Backbone.Collection
+class @HomicideList extends Backbone.Collection
     
     model: Homicide
     
@@ -14,6 +14,9 @@ class HomicideList extends Backbone.Collection
     parse: (response) ->
         response.objects
     
+    comparator: (homicide) ->
+        -1 * homicide.get('datetime').valueOf()
+    
     # return a VictimList from all victims in this incident collection
     getVictims: ->
         victims = @map (homicide) ->
@@ -21,7 +24,7 @@ class HomicideList extends Backbone.Collection
         new VictimList(_.flatten(victims))
     
     
-class VictimList extends Backbone.Collection
+class @VictimList extends Backbone.Collection
     
     model: Victim
     

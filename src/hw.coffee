@@ -1,24 +1,30 @@
-window.templates = {}
-templates.popup = Hogan.compile '''<div class="datetime">
-    <time datetime="{{datetime}}">
-        {{#datetime}}{{#toString}}MMM. d yyyy, h:mm tt{{/toString}}{{/datetime}}
-    </time>
-</div>
-<div class="victims">
-    {{#victims}}
-        {{> victim}}
-    {{/victims}}
-</victims>
-<div class="location">
-    {{address}}
+templates = {}
+templates.popup = Hogan.compile '''<div id="h{{id}}" class="homicide-popup">
+    <div class="datetime">
+        <time datetime="{{datetime}}">
+            {{#datetime}}{{#toString}}MMM. d yyyy, h:mm tt{{/toString}}{{/datetime}}
+        </time>
+    </div>
+    <div class="victims">
+        {{#victims}}
+            {{> victim}}
+        {{/victims}}
+    </victims>
+    <div class="location">
+        {{address}}
+    </div>
 </div>'''
 templates.victim = Hogan.compile '''<div class="victim" id="v{{id}}">
     {{#profile_photo}}
     <img src="{{thumbnail}}" class="profile_photo">
     {{/profile_photo}}
     <p><strong><a href="{{absolute_url}}">{{full_name}}</a></strong></p>
+    <dl>
+        {{#age}}<dt>Age: {{age}}</dt>{{/age}}
+        <dt>Gender: {{gender}}</dt>
+    </dl>
 </div>'''
-
+@templates = templates
 # models
 
 class @Homicide extends Backbone.Model
@@ -35,6 +41,7 @@ class @Homicide extends Backbone.Model
     
     normalize: =>
         changes = {}
+        changes.id = Number @id
         
         # parse datetimes into Date objects
         for attr in ['datetime', 'created', 'modified']
@@ -45,8 +52,13 @@ class @Homicide extends Backbone.Model
         point = @get 'point'
         if point.coordinates
             changes.point = new L.LatLng point.coordinates[1], point.coordinates[0]
-        
+                
         @set changes
+    
+    toJSON: ->
+        data = super
+        if @victims? then data.victims = @victims.toJSON()
+        data
 
     toString: =>
         if @victims
@@ -62,16 +74,25 @@ class @Homicide extends Backbone.Model
         # return the next chronological homicide
         # collections are sorted in reverse chron
         return unless @collection
+        
         ids = @collection.pluck 'id'
-        index = _.indexOf ids, @get 'id', true
-        @collection.at index - 1
+        index = _.indexOf ids, @id, true
+        @collection.at(index - 1)
+    
+    previous: ->
+        # return the previous chronological homicide
+        return unless @collection
+        
+        ids = @collection.pluck 'id'
+        index = _.indexOf ids, @id, true
+        @collection.at(index + 1)
 
 
-class Victim extends Backbone.Model
+class @Victim extends Backbone.Model
     
     initialize: (attributes) ->
         @on 'change', @normalize
-        @view = new VictimInfoWindowView model: this
+        # @view = new VictimInfoWindowView model: this
         return this
         
     normalize: =>
@@ -94,7 +115,7 @@ class Victim extends Backbone.Model
 HomicideList handles all filtering methods related
 to homicide incidents.
 ###
-class HomicideList extends Backbone.Collection
+class @HomicideList extends Backbone.Collection
     
     model: Homicide
     
@@ -104,6 +125,9 @@ class HomicideList extends Backbone.Collection
     parse: (response) ->
         response.objects
     
+    comparator: (homicide) ->
+        -1 * homicide.get('datetime').valueOf()
+    
     # return a VictimList from all victims in this incident collection
     getVictims: ->
         victims = @map (homicide) ->
@@ -111,7 +135,7 @@ class HomicideList extends Backbone.Collection
         new VictimList(_.flatten(victims))
     
     
-class VictimList extends Backbone.Collection
+class @VictimList extends Backbone.Collection
     
     model: Victim
     

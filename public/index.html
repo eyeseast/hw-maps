@@ -13,11 +13,12 @@
     <script>
         $.ajax({
             dataType: 'jsonp',
-            url: 'http://localhost:8000/api/v1/victims/',
+            url: 'http://localhost:8000/api/v1/homicides/',
             success: function(data) {
+                window.homicides = new HomicideList(data.objects);
                 var root = $('#homicides');
-                _.each(data.objects, function(victim) {
-                    root.append(templates.victim.render(victim))
+                homicides.each(function(homicide) {
+                    root.append(templates.popup.render(homicide.toJSON(), templates));
                 });
             }
         })

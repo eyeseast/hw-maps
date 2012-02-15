@@ -1,13 +1,15 @@
-<div class="datetime">
-    <time datetime="{{datetime}}">
-        {{#datetime}}{{#toString}}MMM. d yyyy, h:mm tt{{/toString}}{{/datetime}}
-    </time>
-</div>
-<div class="victims">
-    {{#victims}}
-        {{> victim}}
-    {{/victims}}
-</victims>
-<div class="location">
-    {{address}}
+<div id="h{{id}}" class="homicide-popup">
+    <div class="datetime">
+        <time datetime="{{datetime}}">
+            {{#datetime}}{{#toString}}MMM. d yyyy, h:mm tt{{/toString}}{{/datetime}}
+        </time>
+    </div>
+    <div class="victims">
+        {{#victims}}
+            {{> victim}}
+        {{/victims}}
+    </victims>
+    <div class="location">
+        {{address}}
+    </div>
 </div>

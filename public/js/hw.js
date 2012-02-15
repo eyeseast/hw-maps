@@ -1,12 +1,14 @@
 (function() {
-  var HomicideList, Map, Victim, VictimList;
+  var Map, templates;
   var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; }, __hasProp = Object.prototype.hasOwnProperty, __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
 
-  window.templates = {};
+  templates = {};
 
-  templates.popup = Hogan.compile('<div class="datetime">\n<time datetime="{{datetime}}">\n    {{#datetime}}{{#toString}}MMM. d yyyy, h:mm tt{{/toString}}{{/datetime}}\n</time>\n</div>\n<div class="victims">\n{{#victims}}\n    {{> victim}}\n{{/victims}}\n</victims>\n<div class="location">\n{{address}}\n</div>');
+  templates.popup = Hogan.compile('<div id="h{{id}}" class="homicide-popup">\n<div class="datetime">\n    <time datetime="{{datetime}}">\n        {{#datetime}}{{#toString}}MMM. d yyyy, h:mm tt{{/toString}}{{/datetime}}\n    </time>\n</div>\n<div class="victims">\n    {{#victims}}\n        {{> victim}}\n    {{/victims}}\n</victims>\n<div class="location">\n    {{address}}\n</div>\n</div>');
 
-  templates.victim = Hogan.compile('<div class="victim" id="v{{id}}">\n{{#profile_photo}}\n<img src="{{thumbnail}}" class="profile_photo">\n{{/profile_photo}}\n<p><strong><a href="{{absolute_url}}">{{full_name}}</a></strong></p>\n</div>');
+  templates.victim = Hogan.compile('<div class="victim" id="v{{id}}">\n{{#profile_photo}}\n<img src="{{thumbnail}}" class="profile_photo">\n{{/profile_photo}}\n<p><strong><a href="{{absolute_url}}">{{full_name}}</a></strong></p>\n<dl>\n    {{#age}}<dt>Age: {{age}}</dt>{{/age}}\n    <dt>Gender: {{gender}}</dt>\n</dl>\n</div>');
+
+  this.templates = templates;
 
   this.Homicide = (function() {
 
@@ -31,6 +33,7 @@
     Homicide.prototype.normalize = function() {
       var attr, changes, point, _i, _len, _ref;
       changes = {};
+      changes.id = Number(this.id);
       _ref = ['datetime', 'created', 'modified'];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         attr = _ref[_i];
@@ -41,6 +44,13 @@
         changes.point = new L.LatLng(point.coordinates[1], point.coordinates[0]);
       }
       return this.set(changes);
+    };
+
+    Homicide.prototype.toJSON = function() {
+      var data;
+      data = Homicide.__super__.toJSON.apply(this, arguments);
+      if (this.victims != null) data.victims = this.victims.toJSON();
+      return data;
     };
 
     Homicide.prototype.toString = function() {
@@ -61,15 +71,23 @@
       var ids, index;
       if (!this.collection) return;
       ids = this.collection.pluck('id');
-      index = _.indexOf(ids, this.get('id', true));
+      index = _.indexOf(ids, this.id, true);
       return this.collection.at(index - 1);
+    };
+
+    Homicide.prototype.previous = function() {
+      var ids, index;
+      if (!this.collection) return;
+      ids = this.collection.pluck('id');
+      index = _.indexOf(ids, this.id, true);
+      return this.collection.at(index + 1);
     };
 
     return Homicide;
 
   })();
 
-  Victim = (function() {
+  this.Victim = (function() {
 
     __extends(Victim, Backbone.Model);
 
@@ -80,9 +98,6 @@
 
     Victim.prototype.initialize = function(attributes) {
       this.on('change', this.normalize);
-      this.view = new VictimInfoWindowView({
-        model: this
-      });
       return this;
     };
 
@@ -114,7 +129,7 @@
   to homicide incidents.
   */
 
-  HomicideList = (function() {
+  this.HomicideList = (function() {
 
     __extends(HomicideList, Backbone.Collection);
 
@@ -132,6 +147,10 @@
       return response.objects;
     };
 
+    HomicideList.prototype.comparator = function(homicide) {
+      return -1 * homicide.get('datetime').valueOf();
+    };
+
     HomicideList.prototype.getVictims = function() {
       var victims;
       victims = this.map(function(homicide) {
@@ -144,7 +163,7 @@
 
   })();
 
-  VictimList = (function() {
+  this.VictimList = (function() {
 
     __extends(VictimList, Backbone.Collection);
 
